@@ -50,7 +50,7 @@ app.get('/resolve', async (req, res) => {
             });
             await new Promise(r => setTimeout(r, 3000));
         } catch (err) {
-            // Ignore l'erreur de clic si l'élément n'est pas cliquable
+            // Ignore l'erreur de clic si l'élément n'est pas trouvé
         }
 
         await browser.close();
