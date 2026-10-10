@@ -28,27 +28,34 @@ app.get('/resolve', async (req, res) => {
 
         let streamInfo = { url: null, subtitleUrl: null, headers: {} };
 
+        // Interception des requêtes réseau avec logs pour le débogage
         page.on('request', (request) => {
             const url = request.url();
+            
+            // Log de toutes les requêtes pour analyser ce qui est chargé
+            console.log("Requête interceptée :", url);
+
             if (url.includes('.vtt') || url.includes('.srt') || url.includes('subtitles')) {
                 streamInfo.subtitleUrl = url;
             }
-            if ((url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd')) && !streamInfo.url) {
+            if ((url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd') || url.includes('manifest')) && !streamInfo.url) {
                 if (!url.includes('google') && !url.includes('static') && !url.includes('analytics')) {
                     streamInfo.url = url;
                     streamInfo.headers = request.headers();
+                    console.log("-> Flux vidéo trouvé :", url);
                 }
             }
         });
 
-        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 25000 });
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
+        // Tentative de clic sur le bouton de lecture si présent
         try {
             await page.evaluate(() => {
-                const btn = document.querySelector('video, .vjs-big-play-button, #player, .play-button');
+                const btn = document.querySelector('video, .vjs-big-play-button, #player, .play-button, .jw-display-icon-container');
                 if (btn && typeof btn.click === 'function') btn.click();
             });
-            await new Promise(r => setTimeout(r, 3000));
+            await new Promise(r => setTimeout(r, 4000)); // Attente supplémentaire pour capturer le flux après clic
         } catch (err) {
             // Ignore l'erreur de clic si l'élément n'est pas trouvé
         }
