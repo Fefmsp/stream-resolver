@@ -15,12 +15,7 @@ app.get('/resolve', async (req, res) => {
     try {
         browser = await puppeteer.launch({
             headless: 'new',
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu'
-            ]
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
         });
 
         const page = await browser.newPage();
@@ -28,56 +23,47 @@ app.get('/resolve', async (req, res) => {
 
         let streamInfo = { url: null, subtitleUrl: null, headers: {} };
 
-        // Interception des requêtes réseau avec logs pour le débogage
         page.on('request', (request) => {
             const url = request.url();
-            
-            // Log de toutes les requêtes pour analyser ce qui est chargé
-            console.log("Requête interceptée :", url);
-
             if (url.includes('.vtt') || url.includes('.srt') || url.includes('subtitles')) {
                 streamInfo.subtitleUrl = url;
             }
-            if ((url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd') || url.includes('manifest')) && !streamInfo.url) {
+            if ((url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd')) && !streamInfo.url) {
                 if (!url.includes('google') && !url.includes('static') && !url.includes('analytics')) {
                     streamInfo.url = url;
+                    // On récupère les headers de la requête et on force le referer de vidzy
                     streamInfo.headers = request.headers();
-                    console.log("-> Flux vidéo trouvé :", url);
+                    streamInfo.headers['Referer'] = 'https://vidzy.org/';
                 }
             }
         });
 
         await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-        // Tentative de clic sur le bouton de lecture si présent
         try {
             await page.evaluate(() => {
-                const btn = document.querySelector('video, .vjs-big-play-button, #player, .play-button, .jw-display-icon-container');
+                const btn = document.querySelector('video, .vjs-big-play-button, #player, .play-button');
                 if (btn && typeof btn.click === 'function') btn.click();
             });
-            await new Promise(r => setTimeout(r, 4000)); // Attente supplémentaire pour capturer le flux après clic
-        } catch (err) {
-            // Ignore l'erreur de clic si l'élément n'est pas trouvé
-        }
+            await new Promise(r => setTimeout(r, 4000));
+        } catch (err) {}
 
         await browser.close();
 
         if (streamInfo.url) {
             res.json(streamInfo);
         } else {
-            res.status(404).json({ error: 'Flux vidéo introuvable dans les requêtes réseau' });
+            res.status(404).json({ error: 'Flux vidéo introuvable' });
         }
-
     } catch (error) {
         if (browser) {
             try { await browser.close(); } catch (e) {}
         }
-        console.error("Erreur serveur Puppeteer :", error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`Serveur résolveur en écoute sur le port ${PORT}`);
+    console.log(`Serveur en écoute sur le port ${PORT}`);
 });
