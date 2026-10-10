@@ -31,7 +31,6 @@ app.get('/resolve', async (req, res) => {
             if ((url.includes('.m3u8') || url.includes('.mp4') || url.includes('.mpd')) && !streamInfo.url) {
                 if (!url.includes('google') && !url.includes('static') && !url.includes('analytics')) {
                     streamInfo.url = url;
-                    // On récupère les headers de la requête et on force le referer de vidzy
                     streamInfo.headers = request.headers();
                     streamInfo.headers['Referer'] = 'https://vidzy.org/';
                 }
@@ -53,7 +52,7 @@ app.get('/resolve', async (req, res) => {
         if (streamInfo.url) {
             res.json(streamInfo);
         } else {
-            res.status(404).json({ error: 'Flux vidéo introuvable' });
+            res.status(404).json({ error: 'Flux vidéo introuvable dans les requêtes réseau' });
         }
     } catch (error) {
         if (browser) {
