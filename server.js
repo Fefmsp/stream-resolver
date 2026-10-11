@@ -3,7 +3,13 @@ const puppeteer = require('puppeteer');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+
+// Activation globale du CORS pour toutes les origines
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.get('/resolve', async (req, res) => {
     const targetUrl = req.query.url;
