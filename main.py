@@ -14,8 +14,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Stockage temporaire en mémoire des cookies et en-têtes capturés pour la session active
+active_session_data = {
+    "cookies": [],
+    "headers": {}
+}
+
 @app.get("/resolve")
 async def resolve_stream(url: str = Query(...)):
+    global active_session_data
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
@@ -62,6 +69,13 @@ async def resolve_stream(url: str = Query(...)):
                 if captured_stream:
                     break
                 await asyncio.sleep(1)
+
+            # Récupération des cookies du contexte du navigateur pour authentifier le proxy
+            cookies = await context.cookies()
+            active_session_data["cookies"] = cookies
+            if captured_stream:
+                active_session_data["headers"] = captured_stream["headers"]
+
         except Exception as e:
             await browser.close()
             raise HTTPException(status_code=500, detail=str(e))
@@ -75,6 +89,8 @@ async def resolve_stream(url: str = Query(...)):
 
 @app.get("/proxy")
 async def proxy_stream(url: str = Query(...), request: Request = None):
+    global active_session_data
+    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://vidzy.cc/',
@@ -85,9 +101,12 @@ async def proxy_stream(url: str = Query(...), request: Request = None):
     if request and 'range' in request.headers:
         headers['Range'] = request.headers['range']
 
-    async with httpx.AsyncClient() as client:
+    # Construction du dictionnaire de cookies capturés par Playwright
+    cookies_dict = {c['name']: c['value'] for c in active_session_data.get("cookies", [])}
+
+    async with httpx.AsyncClient(cookies=cookies_dict, follow_redirects=True) as client:
         try:
-            resp = await client.get(url, headers=headers, follow_redirects=True)
+            resp = await client.get(url, headers=headers)
             
             response_headers = {
                 "Access-Control-Allow-Origin": "*",
