@@ -10,7 +10,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Route de résolution avec Playwright
 app.get('/resolve', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -19,15 +18,18 @@ app.get('/resolve', async (req, res) => {
 
     let browser;
     try {
-        // Lancement de Chromium via Playwright en mode headless avec options anti-bot
+        // Lancement avec un maximum d'arguments de contournement sandbox pour Linux
         browser = await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-blink-features=AutomationControlled'
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-gpu'
             ]
         });
 
@@ -38,10 +40,8 @@ app.get('/resolve', async (req, res) => {
         });
 
         const page = await context.newPage();
-
         let streamInfo = { url: null, subtitleUrl: null, headers: {} };
 
-        // Interception des requêtes réseau pour capturer le flux et les jetons
         page.on('request', (request) => {
             const url = request.url();
             if (url.includes('.vtt') || url.includes('.srt') || url.includes('subtitles')) {
@@ -56,41 +56,33 @@ app.get('/resolve', async (req, res) => {
             }
         });
 
-        // Navigation vers la page cible
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
 
-        // Attente et simulation d'un clic sur le lecteur pour déclencher le chargement du flux
         try {
             await page.waitForSelector('video, .vjs-big-play-button, #player, .play-button, iframe', { timeout: 8000 });
             await page.click('video, .vjs-big-play-button, #player, .play-button, div[class*="play"]');
-            
-            // Laisser le temps au réseau de capturer le manifeste avec ses jetons
             await new Promise(r => setTimeout(r, 5000));
-        } catch (err) {
-            console.log(" Élément de lecture non cliquable, écoute passive du réseau...");
-        }
+        } catch (err) {}
 
         await browser.close();
 
         if (streamInfo.url) {
             res.json(streamInfo);
         } else {
-            res.status(404).json({ error: 'Flux vidéo introuvable dans les requêtes réseau' });
+            res.status(404).json({ error: 'Flux vidéo introuvable' });
         }
     } catch (error) {
         if (browser) {
             try { await browser.close(); } catch (e) {}
         }
+        console.error("Erreur serveur /resolve:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Route Proxy sécurisée pour les playlists et les segments binaires (.ts)
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
-    if (!targetUrl) {
-        return res.status(400).json({ error: 'URL manquante' });
-    }
+    if (!targetUrl) return res.status(400).json({ error: 'URL manquante' });
     try {
         const response = await fetch(targetUrl, {
             headers: {
@@ -98,13 +90,10 @@ app.get('/proxy', async (req, res) => {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
-
         const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
-        res.send(buffer);
+        res.send(Buffer.from(arrayBuffer));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
