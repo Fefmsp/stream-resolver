@@ -11,6 +11,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Route de résolution Puppeteer
 app.get('/resolve', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -65,6 +66,28 @@ app.get('/resolve', async (req, res) => {
             try { await browser.close(); } catch (e) {}
         }
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Route Proxy pour contourner le CORS et le 403 Forbidden sur les flux .m3u8
+app.get('/proxy', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) {
+        return res.status(400).json({ error: 'URL manquante' });
+    }
+    try {
+        const response = await fetch(targetUrl, {
+            headers: {
+                'Referer': 'https://vidzy.org/',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36'
+            }
+        });
+        const body = await response.text();
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', response.headers.get('content-type') || 'application/vnd.apple.mpegurl');
+        res.send(body);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
