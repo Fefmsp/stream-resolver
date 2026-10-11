@@ -51,7 +51,7 @@ app.get('/resolve', async (req, res) => {
                 if (!url.includes('google') && !url.includes('static') && !url.includes('analytics')) {
                     streamInfo.url = url;
                     streamInfo.headers = request.headers();
-                    streamInfo.headers['Referer'] = 'https://vidzy.org/';
+                    streamInfo.headers['Referer'] = 'https://vidzy.cc/';
                 }
             }
         });
@@ -82,7 +82,7 @@ app.get('/resolve', async (req, res) => {
     }
 });
 
-// Route Proxy robuste avec transmission des requêtes partielles (Range) et support binaire
+// Route Proxy avec le Referer mis à jour sur https://vidzy.cc/ et support Range
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -90,7 +90,7 @@ app.get('/proxy', async (req, res) => {
     }
     try {
         const fetchHeaders = {
-            'Referer': 'https://vidzy.org/',
+            'Referer': 'https://vidzy.cc/',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         };
 
