@@ -18,18 +18,18 @@ app.get('/resolve', async (req, res) => {
 
     let browser;
     try {
-        // Lancement avec un maximum d'arguments de contournement sandbox pour Linux
+        console.log("Lancement de Chromium pour l'URL :", targetUrl);
         browser = await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
+                '--disable-gpu',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
+                '--single-process'
             ]
         });
 
@@ -62,20 +62,23 @@ app.get('/resolve', async (req, res) => {
             await page.waitForSelector('video, .vjs-big-play-button, #player, .play-button, iframe', { timeout: 8000 });
             await page.click('video, .vjs-big-play-button, #player, .play-button, div[class*="play"]');
             await new Promise(r => setTimeout(r, 5000));
-        } catch (err) {}
+        } catch (err) {
+            console.log("Note : Élément de clic non trouvé, poursuite de l'écoute réseau.");
+        }
 
         await browser.close();
 
         if (streamInfo.url) {
             res.json(streamInfo);
         } else {
-            res.status(404).json({ error: 'Flux vidéo introuvable' });
+            res.status(404).json({ error: 'Flux vidéo introuvable dans les requêtes réseau' });
         }
     } catch (error) {
         if (browser) {
             try { await browser.close(); } catch (e) {}
         }
-        console.error("Erreur serveur /resolve:", error.message);
+        // Affiche l'erreur exacte dans les logs Render
+        console.error("ERREUR CRITIQUE /resolve :", error);
         res.status(500).json({ error: error.message });
     }
 });
