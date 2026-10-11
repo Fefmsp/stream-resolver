@@ -83,7 +83,7 @@ app.get('/resolve', async (req, res) => {
     }
 });
 
-// Route Proxy ultra-permissive avec transmission intégrale
+// Route Proxy dynamique transparente avec support Range et Referer adéquat
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -94,7 +94,8 @@ app.get('/proxy', async (req, res) => {
             'Referer': 'https://vidzy.cc/',
             'Origin': 'https://vidzy.cc',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*'
+            'Accept': '*/*',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
         };
 
         if (req.headers['range']) {
@@ -115,7 +116,6 @@ app.get('/proxy', async (req, res) => {
         }
 
         res.status(response.status);
-
         const arrayBuffer = await response.arrayBuffer();
         res.send(Buffer.from(arrayBuffer));
     } catch (err) {
