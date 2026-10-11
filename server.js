@@ -1,17 +1,16 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const { chromium } = require('playwright');
 const cors = require('cors');
 
 const app = express();
 
-// Activation globale du CORS pour toutes les origines
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Route de résolution Puppeteer optimisée (anti-bot & comportement humain)
+// Route de résolution avec Playwright
 app.get('/resolve', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -20,31 +19,29 @@ app.get('/resolve', async (req, res) => {
 
     let browser;
     try {
-        browser = await puppeteer.launch({
-            headless: 'new',
+        // Lancement de Chromium via Playwright en mode headless avec options anti-bot
+        browser = await chromium.launch({
+            headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-blink-features=AutomationControlled', // Masque l'automatisation
-                '--window-size=1280,720'
+                '--disable-blink-features=AutomationControlled'
             ]
         });
 
-        const page = await browser.newPage();
-
-        // Émulation d'un vrai navigateur desktop / TV pour éviter les blocages mobiles stricts
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        await page.setViewport({ width: 1280, height: 720 });
-
-        // Supprime l'indicateur navigator.webdriver détecté par les anti-bots
-        await page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        const context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport: { width: 1280, height: 720 },
+            locale: 'fr-FR'
         });
+
+        const page = await context.newPage();
 
         let streamInfo = { url: null, subtitleUrl: null, headers: {} };
 
+        // Interception des requêtes réseau pour capturer le flux et les jetons
         page.on('request', (request) => {
             const url = request.url();
             if (url.includes('.vtt') || url.includes('.srt') || url.includes('subtitles')) {
@@ -62,22 +59,15 @@ app.get('/resolve', async (req, res) => {
         // Navigation vers la page cible
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
 
-        // Attente active d'un élément vidéo ou d'un bouton de lecture sur la page
+        // Attente et simulation d'un clic sur le lecteur pour déclencher le chargement du flux
         try {
             await page.waitForSelector('video, .vjs-big-play-button, #player, .play-button, iframe', { timeout: 8000 });
+            await page.click('video, .vjs-big-play-button, #player, .play-button, div[class*="play"]');
             
-            // Simulation d'un clic humain sur le lecteur ou le bouton de lecture
-            await page.evaluate(() => {
-                const btn = document.querySelector('video, .vjs-big-play-button, #player, .play-button, div[class*="play"]');
-                if (btn && typeof btn.click === 'function') {
-                    btn.click();
-                }
-            });
-            
-            // Laisser le temps au réseau de charger le manifeste .m3u8 après le clic
+            // Laisser le temps au réseau de capturer le manifeste avec ses jetons
             await new Promise(r => setTimeout(r, 5000));
         } catch (err) {
-            console.log(" Élément de lecture non trouvé ou délai dépassé, analyse des requêtes réseau directes...");
+            console.log(" Élément de lecture non cliquable, écoute passive du réseau...");
         }
 
         await browser.close();
@@ -95,7 +85,7 @@ app.get('/resolve', async (req, res) => {
     }
 });
 
-// Route Proxy sécurisée pour les playlists (.m3u8) et les segments vidéo binaires (.ts)[cite: 3]
+// Route Proxy sécurisée pour les playlists et les segments binaires (.ts)
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -122,5 +112,5 @@ app.get('/proxy', async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`Serveur en écoute sur le port ${PORT}`);
+    console.log(`Serveur Playwright en écoute sur le port ${PORT}`);
 });
