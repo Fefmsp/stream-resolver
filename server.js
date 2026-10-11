@@ -11,7 +11,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Route de résolution Puppeteer
+// Route de résolution Puppeteer optimisée (anti-bot & comportement humain)
 app.get('/resolve', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -22,11 +22,26 @@ app.get('/resolve', async (req, res) => {
     try {
         browser = await puppeteer.launch({
             headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-blink-features=AutomationControlled', // Masque l'automatisation
+                '--window-size=1280,720'
+            ]
         });
 
         const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Linux; Android 13; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36');
+
+        // Émulation d'un vrai navigateur desktop / TV pour éviter les blocages mobiles stricts
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        await page.setViewport({ width: 1280, height: 720 });
+
+        // Supprime l'indicateur navigator.webdriver détecté par les anti-bots
+        await page.evaluateOnNewDocument(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        });
 
         let streamInfo = { url: null, subtitleUrl: null, headers: {} };
 
@@ -44,15 +59,26 @@ app.get('/resolve', async (req, res) => {
             }
         });
 
-        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        // Navigation vers la page cible
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
 
+        // Attente active d'un élément vidéo ou d'un bouton de lecture sur la page
         try {
+            await page.waitForSelector('video, .vjs-big-play-button, #player, .play-button, iframe', { timeout: 8000 });
+            
+            // Simulation d'un clic humain sur le lecteur ou le bouton de lecture
             await page.evaluate(() => {
-                const btn = document.querySelector('video, .vjs-big-play-button, #player, .play-button');
-                if (btn && typeof btn.click === 'function') btn.click();
+                const btn = document.querySelector('video, .vjs-big-play-button, #player, .play-button, div[class*="play"]');
+                if (btn && typeof btn.click === 'function') {
+                    btn.click();
+                }
             });
-            await new Promise(r => setTimeout(r, 4000));
-        } catch (err) {}
+            
+            // Laisser le temps au réseau de charger le manifeste .m3u8 après le clic
+            await new Promise(r => setTimeout(r, 5000));
+        } catch (err) {
+            console.log(" Élément de lecture non trouvé ou délai dépassé, analyse des requêtes réseau directes...");
+        }
 
         await browser.close();
 
@@ -69,7 +95,7 @@ app.get('/resolve', async (req, res) => {
     }
 });
 
-// Route Proxy sécurisée pour les playlists (.m3u8) et les segments vidéo binaires (.ts)
+// Route Proxy sécurisée pour les playlists (.m3u8) et les segments vidéo binaires (.ts)[cite: 3]
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -79,11 +105,10 @@ app.get('/proxy', async (req, res) => {
         const response = await fetch(targetUrl, {
             headers: {
                 'Referer': 'https://vidzy.org/',
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
         });
 
-        // Récupération sous forme de Buffer binaire pour éviter de corrompre les segments vidéo (.ts)
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
