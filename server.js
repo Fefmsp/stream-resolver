@@ -83,7 +83,7 @@ app.get('/resolve', async (req, res) => {
     }
 });
 
-// Route Proxy dynamique transparente avec support Range et Referer adéquat
+// Route Proxy avec empreinte navigateur complète anti-Cloudflare
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -91,10 +91,19 @@ app.get('/proxy', async (req, res) => {
     }
     try {
         const fetchHeaders = {
+            'Host': new URL(targetUrl).host,
+            'Connection': 'keep-alive',
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Sec-Fetch-Site': 'cross-site',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Dest': 'video',
             'Referer': 'https://vidzy.cc/',
             'Origin': 'https://vidzy.cc',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
             'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
         };
 
