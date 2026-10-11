@@ -7,7 +7,7 @@ const app = express();
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range']
 }));
 
 app.get('/resolve', async (req, res) => {
@@ -77,25 +77,43 @@ app.get('/resolve', async (req, res) => {
         if (browser) {
             try { await browser.close(); } catch (e) {}
         }
-        // Affiche l'erreur exacte dans les logs Render
         console.error("ERREUR CRITIQUE /resolve :", error);
         res.status(500).json({ error: error.message });
     }
 });
 
+// Route Proxy robuste avec transmission des requêtes partielles (Range) et support binaire
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
-    if (!targetUrl) return res.status(400).json({ error: 'URL manquante' });
+    if (!targetUrl) {
+        return res.status(400).json({ error: 'URL manquante' });
+    }
     try {
-        const response = await fetch(targetUrl, {
-            headers: {
-                'Referer': 'https://vidzy.org/',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
-        const arrayBuffer = await response.arrayBuffer();
+        const fetchHeaders = {
+            'Referer': 'https://vidzy.org/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        };
+
+        if (req.headers['range']) {
+            fetchHeaders['Range'] = req.headers['range'];
+        }
+
+        const response = await fetch(targetUrl, { headers: fetchHeaders });
+
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', '*');
         res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+
+        if (response.headers.get('content-range')) {
+            res.setHeader('Content-Range', response.headers.get('content-range'));
+        }
+        if (response.headers.get('accept-ranges')) {
+            res.setHeader('Accept-Ranges', response.headers.get('accept-ranges'));
+        }
+
+        res.status(response.status);
+
+        const arrayBuffer = await response.arrayBuffer();
         res.send(Buffer.from(arrayBuffer));
     } catch (err) {
         res.status(500).json({ error: err.message });
