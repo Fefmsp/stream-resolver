@@ -69,7 +69,7 @@ app.get('/resolve', async (req, res) => {
     }
 });
 
-// Route Proxy pour contourner le CORS et le 403 Forbidden sur les flux .m3u8
+// Route Proxy sécurisée pour les playlists (.m3u8) et les segments vidéo binaires (.ts)
 app.get('/proxy', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
@@ -82,10 +82,14 @@ app.get('/proxy', async (req, res) => {
                 'User-Agent': 'Mozilla/5.0 (Linux; Android 13; TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36'
             }
         });
-        const body = await response.text();
+
+        // Récupération sous forme de Buffer binaire pour éviter de corrompre les segments vidéo (.ts)
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'application/vnd.apple.mpegurl');
-        res.send(body);
+        res.setHeader('Content-Type', response.headers.get('content-type') || 'application/octet-stream');
+        res.send(buffer);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
